@@ -9,3 +9,16 @@ services:
     volumes:
       - ./data:/data
       - ./.env:/app/.env:ro
+    environment:
+      - SCALE_INSTANCE_ID=1
+    depends_on:
+      - redis
+
+  redis:
+    container_name: meshcore-mqtt-broker-redis
+    hostname: meshcore-mqtt-broker-redis
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis:/data
