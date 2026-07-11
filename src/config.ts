@@ -76,6 +76,7 @@ export function loadAbuseConfig(): AbuseConfig {
     'ABUSE_TOPIC_HISTORY_WINDOW_MS',
     'ABUSE_PERSISTENCE_PATH',
     'ABUSE_PERSISTENCE_INTERVAL_MS',
+    'ABUSE_STATE_RETENTION_MS',
     'ABUSE_PERSISTENCE_BLOCK_OBSERVER_PUBLIC_KEYS',
     'ABUSE_ENFORCEMENT_ENABLED',
   ]);
@@ -98,6 +99,8 @@ export function loadAbuseConfig(): AbuseConfig {
     topicHistoryWindowMs: parseInt(process.env.ABUSE_TOPIC_HISTORY_WINDOW_MS!),
     persistencePath: process.env.ABUSE_PERSISTENCE_PATH!,
     persistenceIntervalMs: parseInt(process.env.ABUSE_PERSISTENCE_INTERVAL_MS!),
+    // Optional; defaults to 7 days. Clients with no activity within this window are evicted.
+    stateRetentionMs: parseInt(process.env.ABUSE_STATE_RETENTION_MS || '604800000'),
     blockObserverPublicKeys: (process.env.ABUSE_PERSISTENCE_BLOCK_OBSERVER_PUBLIC_KEYS ?? '').split(','),
     enforcementEnabled: process.env.ABUSE_ENFORCEMENT_ENABLED === 'true',
   };
