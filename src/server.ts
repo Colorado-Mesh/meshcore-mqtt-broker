@@ -34,6 +34,11 @@ function isAllowedIATACode(code: string): boolean {
     return abuseConfig.allowedIataCodes.length <= 0 || abuseConfig.allowedIataCodes.includes(code);
 }
 
+// Helper function to validate blocked observer public keys
+function isBlockedObserver(publicKey: string): boolean {
+    return abuseConfig.blockObserverPublicKeys.length >= 0 && abuseConfig.blockObserverPublicKeys.includes(publicKey);
+}
+
 // Client types
 enum ClientType {
     SUBSCRIBER = 'subscriber',
@@ -234,6 +239,12 @@ broker.authenticate = async (client, username, password, callback) => {
 
         if (!passwordStr || passwordStr.length === 0) {
             console.log(`${logPrefix} [AUTH] ✗ No password provided`);
+            callback(null, false);
+            return;
+        }
+
+        if (isBlockedObserver(publicKey)) {
+            console.log(`${logPrefix} [AUTH] ✗ Publisher blocked by public key: ${publicKey}`);
             callback(null, false);
             return;
         }

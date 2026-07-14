@@ -129,6 +129,9 @@ export interface AbuseConfig {
   // Persistence
   persistencePath: string;
   persistenceIntervalMs: number;
+
+  // Block observers
+  blockObserverPublicKeys: string[];
   
   // Enforcement
   enforcementEnabled: boolean;
