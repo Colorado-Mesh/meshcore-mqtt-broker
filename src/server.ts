@@ -17,6 +17,7 @@ const scaleConfig = loadScaleConfig();
 
 const WS_PORT = mqttConfig.wsPort;
 const HOST = mqttConfig.host;
+const REDIRECT = mqttConfig.redirect;
 const EXPECTED_AUDIENCE = mqttConfig.expectedAudience;
 
 // Helper function to validate IATA airport codes
@@ -872,10 +873,10 @@ broker.on('clientError', (client, err) => {
 
 // Create HTTP server for WebSocket
 const httpServer = createServer((req, res) => {
-    // If this is not a WebSocket upgrade request, redirect to analyzer
+    // If this is not a WebSocket upgrade request, redirect to redirect URL
     if (!req.headers.upgrade || req.headers.upgrade.toLowerCase() !== 'websocket') {
-        console.log(`[HTTP] Non-WebSocket request from ${getClientIP(req)}, redirecting to analyzer`);
-        res.writeHead(301, {'Location': 'https://analyzer.letsmesh.net/'});
+        console.log(`[HTTP] Non-WebSocket request from ${getClientIP(req)}, redirecting to ${REDIRECT}`);
+        res.writeHead(301, {'Location': REDIRECT});
         res.end();
         return;
     }

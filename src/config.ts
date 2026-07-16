@@ -20,12 +20,14 @@ export function loadMqttConfig() {
   validateRequiredEnvVars([
     'MQTT_WS_PORT',
     'MQTT_HOST',
+    'MQTT_REDIRECT_URL',
     'AUTH_EXPECTED_AUDIENCE',
   ]);
 
   return {
     wsPort: parseInt(process.env.MQTT_WS_PORT!),
     host: process.env.MQTT_HOST!,
+    redirect: process.env.MQTT_REDIRECT_URL!,
     expectedAudience: process.env.AUTH_EXPECTED_AUDIENCE!,
   };
 }
