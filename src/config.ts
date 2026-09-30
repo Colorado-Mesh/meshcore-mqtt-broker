@@ -15,6 +15,14 @@ function validateRequiredEnvVars(vars: string[]): void {
   }
 }
 
+// Parse a comma-separated env var into a trimmed, uppercased list (empty entries dropped)
+function parseUpperList(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map(item => item.trim().toUpperCase())
+    .filter(item => item.length > 0);
+}
+
 // Validate and load MQTT configuration
 export function loadMqttConfig() {
   validateRequiredEnvVars([
@@ -94,14 +102,16 @@ export function loadAbuseConfig(): AbuseConfig {
     maxTopicsPerDay: parseInt(process.env.ABUSE_MAX_TOPICS_PER_DAY!),
     anomalyThreshold: parseInt(process.env.ABUSE_ANOMALY_THRESHOLD!),
     maxIataChanges24h: parseInt(process.env.ABUSE_MAX_IATA_CHANGES_24H!),
-    allowedIataCodes: (process.env.ABUSE_ALLOWED_IATA_CODES ?? '').split(','),
+    allowedIataCodes: parseUpperList(process.env.ABUSE_ALLOWED_IATA_CODES),
     topicHistorySize: parseInt(process.env.ABUSE_TOPIC_HISTORY_SIZE!),
     topicHistoryWindowMs: parseInt(process.env.ABUSE_TOPIC_HISTORY_WINDOW_MS!),
     persistencePath: process.env.ABUSE_PERSISTENCE_PATH!,
     persistenceIntervalMs: parseInt(process.env.ABUSE_PERSISTENCE_INTERVAL_MS!),
     // Optional; defaults to 7 days. Clients with no activity within this window are evicted.
     stateRetentionMs: parseInt(process.env.ABUSE_STATE_RETENTION_MS || '604800000'),
-    blockObserverPublicKeys: (process.env.ABUSE_PERSISTENCE_BLOCK_OBSERVER_PUBLIC_KEYS ?? '').split(','),
+    blacklistedObserverPublicKeys: parseUpperList(process.env.ABUSE_PERSISTENCE_BLOCK_OBSERVER_PUBLIC_KEYS),
+    // Optional; adverts from these repeater public keys are dropped before reaching non-admin subscribers.
+    blacklistedRepeaterPublicKeys: parseUpperList(process.env.ABUSE_BLOCK_REPEATER_PUBLIC_KEYS),
     enforcementEnabled: process.env.ABUSE_ENFORCEMENT_ENABLED === 'true',
   };
 }

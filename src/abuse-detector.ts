@@ -145,8 +145,11 @@ export interface AbuseConfig {
   // evicted from memory and disk on each save so the store stays bounded by active clients.
   stateRetentionMs: number;
 
-  // Block observers
-  blockObserverPublicKeys: string[];
+  // Blacklisted observers
+  blacklistedObserverPublicKeys: string[];
+
+  // Blacklisted repeaters (their adverts are dropped before reaching non-admin subscribers)
+  blacklistedRepeaterPublicKeys: string[];
 
   // Enforcement
   enforcementEnabled: boolean;

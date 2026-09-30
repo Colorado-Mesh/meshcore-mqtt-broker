@@ -2,7 +2,8 @@ import {Aedes} from 'aedes';
 import {createServer} from 'http';
 import {WebSocketServer} from 'ws';
 import {Duplex} from 'stream';
-import {verifyAuthToken} from '@michaelhart/meshcore-decoder';
+import {verifyAuthToken, MeshCorePacketDecoder, PayloadType} from '@michaelhart/meshcore-decoder';
+import type {AdvertPayload} from '@michaelhart/meshcore-decoder';
 import {getAirportInfo} from 'airport-utils';
 import {RateLimiter} from './rate-limiter';
 import {getClientIP} from './ip-utils';
@@ -32,12 +33,51 @@ function isValidIATACode(code: string): boolean {
 
 // Helper function to validate allowed IATA airport codes
 function isAllowedIATACode(code: string): boolean {
-    return abuseConfig.allowedIataCodes.length <= 0 || abuseConfig.allowedIataCodes.includes(code);
+    return abuseConfig.allowedIataCodes.length === 0 || abuseConfig.allowedIataCodes.includes(code.toUpperCase());
 }
 
-// Helper function to validate blocked observer public keys
-function isBlockedObserver(publicKey: string): boolean {
-    return abuseConfig.blockObserverPublicKeys.length >= 0 && abuseConfig.blockObserverPublicKeys.includes(publicKey);
+// Helper function to validate blacklisted observer public keys
+const blacklistedObserverKeys = new Set(abuseConfig.blacklistedObserverPublicKeys);
+function isBlacklistedObserver(publicKey: string): boolean {
+    return blacklistedObserverKeys.has(publicKey.toUpperCase());
+}
+
+// Blocked repeaters are identified by the full public key carried in their ADVERT packets
+const blacklistedRepeaterKeys = new Set(abuseConfig.blacklistedRepeaterPublicKeys);
+
+// Verdict cache keyed by payload buffer, so a packet fanned out to many subscribers is only inspected once
+const blacklistedAdvertVerdicts = new WeakMap<Buffer, string | null>();
+
+// Returns the blacklisted repeater's public key if this /packets message is one of its adverts, otherwise null
+function getBlacklistedRepeaterAdvertKey(topic: string, payload: Buffer): string | null {
+    if (blacklistedRepeaterKeys.size === 0) {
+        return null;
+    }
+
+    const cached = blacklistedAdvertVerdicts.get(payload);
+    if (cached !== undefined) {
+        return cached;
+    }
+
+    let blacklistedKey: string | null = null;
+    try {
+        const raw = JSON.parse(payload.toString()).raw;
+        // Payload type lives in bits 2-5 of the header byte; skip the full decode for non-adverts
+        if (typeof raw === 'string' && raw.length >= 2 && ((parseInt(raw.substring(0, 2), 16) >> 2) & 0x0F) === PayloadType.Advert) {
+            const decoded = MeshCorePacketDecoder.decode(raw);
+            const advert = decoded.payload.decoded as AdvertPayload | null;
+            const advertKey = advert?.publicKey?.toUpperCase();
+            if (decoded.payloadType === PayloadType.Advert && advertKey && blacklistedRepeaterKeys.has(advertKey)) {
+                blacklistedKey = advertKey;
+                console.debug(`[FILTER] Received advert from blacklisted repeater ${advertKey.substring(0, 8)} -> ${topic}`);
+            }
+        }
+    } catch {
+        // Unparseable messages are not adverts we can attribute; let them through
+    }
+
+    blacklistedAdvertVerdicts.set(payload, blacklistedKey);
+    return blacklistedKey;
 }
 
 // Client types
@@ -244,8 +284,8 @@ broker.authenticate = async (client, username, password, callback) => {
             return;
         }
 
-        if (isBlockedObserver(publicKey)) {
-            console.log(`${logPrefix} [AUTH] ✗ Publisher blocked by public key: ${publicKey}`);
+        if (isBlacklistedObserver(publicKey)) {
+            console.log(`${logPrefix} [AUTH] ✗ Publisher blacklisted by public key: ${publicKey}`);
             callback(null, false);
             return;
         }
@@ -671,24 +711,28 @@ broker.authorizeForward = (client, packet) => {
     const clientType = (client as any).clientType;
     const role = (client as any).role;
 
-    // Block $SYS/* messages for non-admin subscribers (only role 1 can see system topics)
+    // Block admin traffic for non-admins
     if (clientType === ClientType.SUBSCRIBER && role !== SubscriberRole.ADMIN) {
+        // Block $SYS/* messages for non-admin subscribers (only role 1 can see system topics)
         if (packet.topic.startsWith('$SYS/')) {
             return null; // Block delivery of this message
         }
-    }
 
-    // Critical: Block /internal topics for non-admin subscribers (contains PII)
-    if (clientType === ClientType.SUBSCRIBER && role !== SubscriberRole.ADMIN) {
+        // Critical: Block /internal topics for non-admin subscribers (contains PII)
         if (packet.topic.includes('/internal')) {
             return null; // Block delivery of this message
         }
-    }
 
-    // Block /serial/* topics for non-admin subscribers (remote serial access is admin-only)
-    if (clientType === ClientType.SUBSCRIBER && role !== SubscriberRole.ADMIN) {
+        // Block /serial/* topics for non-admin subscribers (remote serial access is admin-only)
         if (packet.topic.includes('/serial/')) {
             return null; // Block delivery of this message
+        }
+
+        // Drop adverts from blacklisted repeaters for non-admin subscribers
+        if (packet.topic.endsWith('/packets') && packet.payload && packet.payload.length > 0) {
+            if (getBlacklistedRepeaterAdvertKey(packet.topic, packet.payload as Buffer) !== null) {
+                return null;  // Block delivery of this message
+            }
         }
     }
 
